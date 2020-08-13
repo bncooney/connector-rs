@@ -7,6 +7,8 @@ use std::{
 	time::{Duration, Instant},
 };
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 #[macro_use]
 extern crate num_derive;
 use num_derive::FromPrimitive;
@@ -14,7 +16,62 @@ use num_traits::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+#[derive(Debug, Default)]
+pub struct ConnextLibrary<'a> {
+	// library: Option<&'a Library>,
+	connector_new_handle: Option<Symbol<'a , unsafe extern "C" fn(
+		config_name: *const c_char,
+		config_file: *const c_char,
+		config: isize,
+	) -> isize>>,
+}
+
+impl<'a> ConnextLibrary<'a> {
+	pub fn new(library: &'a Library) -> Result<Self> {
+		let mut connext_library = ConnextLibrary {..Default::default()};
+
+		connext_library.connector_new_handle = Some(ConnextLibrary::load_connector_new(library)?);
+
+		return Ok(connext_library)
+	}
+
+	fn load_connector_new(library: &'a Library) -> Result<Symbol<'a , unsafe extern "C" fn(
+		config_name: *const c_char,
+		config_file: *const c_char,
+		config: isize,
+	) -> isize>> {
+		let func: Symbol<
+				unsafe extern "C" fn(
+					config_name: *const c_char,
+					config_file: *const c_char,
+					config: isize,
+				) -> isize,
+			>;
+
+		unsafe {
+			func = library.get(b"RTIDDSConnector_new")?;
+		}
+
+		return Ok(func)
+	}
+
+	pub fn connector_new(&self, config_name: &str, config_file: &str) -> Result<isize> {
+		// let connector_handle = &self.connector_new_handle.unwrap()
+		match &self.connector_new_handle {
+			Some(handle) => {
+				let value: isize;
+				unsafe {
+				value = handle(
+				CString::new(config_name)?.as_ptr(),
+				CString::new(config_file)?.as_ptr(),
+				0);
+				}
+				return Ok(value)
+			} 
+			None => panic!()
+		}
+	}
+}
 
 #[derive(Debug)]
 pub struct Timeout;
