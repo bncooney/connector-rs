@@ -19,7 +19,7 @@ use libloading::{Library, Symbol};
 #[derive(Debug)]
 pub struct ConnextLibrary<'a> {
 	// library: Option<&'a Library>,
-	connector_new_handle: Symbol<
+	connector_new_symbol: Symbol<
 		'a,
 		unsafe extern "C" fn(
 			config_name: *const c_char,
@@ -32,11 +32,11 @@ pub struct ConnextLibrary<'a> {
 impl<'a> ConnextLibrary<'a> {
 	pub fn new(library: &'a Library) -> Result<Self> {
 		Ok(ConnextLibrary {
-			connector_new_handle: ConnextLibrary::load_connector_new(library)?,
+			connector_new_symbol: ConnextLibrary::load_connector_new_symbol(library)?,
 		})
 	}
 
-	fn load_connector_new(
+	fn load_connector_new_symbol(
 		library: &'a Library,
 	) -> Result<
 		Symbol<
@@ -63,11 +63,12 @@ impl<'a> ConnextLibrary<'a> {
 		return Ok(func);
 	}
 
+	// TODO: Return strongly typed Connector (move into Connector::new)
 	pub fn connector_new(&self, config_name: &str, config_file: &str) -> Result<isize> {
 		let value: isize;
-		let func = &self.connector_new_handle;
+		let fn_connector_new = &self.connector_new_symbol;
 		unsafe {
-			value = func(
+			value = fn_connector_new(
 				CString::new(config_name)?.as_ptr(),
 				CString::new(config_file)?.as_ptr(),
 				0,
