@@ -16,60 +16,64 @@ use num_traits::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ConnextLibrary<'a> {
 	// library: Option<&'a Library>,
-	connector_new_handle: Option<Symbol<'a , unsafe extern "C" fn(
-		config_name: *const c_char,
-		config_file: *const c_char,
-		config: isize,
-	) -> isize>>,
+	connector_new_handle: Symbol<
+		'a,
+		unsafe extern "C" fn(
+			config_name: *const c_char,
+			config_file: *const c_char,
+			config: isize,
+		) -> isize,
+	>,
 }
 
 impl<'a> ConnextLibrary<'a> {
 	pub fn new(library: &'a Library) -> Result<Self> {
-		let mut connext_library = ConnextLibrary {..Default::default()};
-
-		connext_library.connector_new_handle = Some(ConnextLibrary::load_connector_new(library)?);
-
-		return Ok(connext_library)
+		Ok(ConnextLibrary {
+			connector_new_handle: ConnextLibrary::load_connector_new(library)?,
+		})
 	}
 
-	fn load_connector_new(library: &'a Library) -> Result<Symbol<'a , unsafe extern "C" fn(
-		config_name: *const c_char,
-		config_file: *const c_char,
-		config: isize,
-	) -> isize>> {
+	fn load_connector_new(
+		library: &'a Library,
+	) -> Result<
+		Symbol<
+			'a,
+			unsafe extern "C" fn(
+				config_name: *const c_char,
+				config_file: *const c_char,
+				config: isize,
+			) -> isize,
+		>,
+	> {
 		let func: Symbol<
-				unsafe extern "C" fn(
-					config_name: *const c_char,
-					config_file: *const c_char,
-					config: isize,
-				) -> isize,
-			>;
+			unsafe extern "C" fn(
+				config_name: *const c_char,
+				config_file: *const c_char,
+				config: isize,
+			) -> isize,
+		>;
 
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
 		}
 
-		return Ok(func)
+		return Ok(func);
 	}
 
 	pub fn connector_new(&self, config_name: &str, config_file: &str) -> Result<isize> {
-		// let connector_handle = &self.connector_new_handle.unwrap()
-		match &self.connector_new_handle {
-			Some(handle) => {
-				let value: isize;
-				unsafe {
-				value = handle(
+		let value: isize;
+		let func = &self.connector_new_handle;
+		unsafe {
+			value = func(
 				CString::new(config_name)?.as_ptr(),
 				CString::new(config_file)?.as_ptr(),
-				0);
-				}
-				return Ok(value)
-			} 
-			None => panic!()
+				0,
+			);
 		}
+		return Ok(value);
 	}
 }
 
