@@ -18,15 +18,7 @@ use libloading::{Library, Symbol};
 
 #[derive(Debug)]
 pub struct ConnextLibrary<'a> {
-	// library: Option<&'a Library>,
-	connector_new_symbol: Symbol<
-		'a,
-		unsafe extern "C" fn(
-			config_name: *const c_char,
-			config_file: *const c_char,
-			config: isize,
-		) -> isize,
-	>,
+	connector_new_symbol: Symbol<'a, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>,
 }
 
 impl<'a> ConnextLibrary<'a> {
@@ -36,25 +28,8 @@ impl<'a> ConnextLibrary<'a> {
 		})
 	}
 
-	fn load_connector_new_symbol(
-		library: &'a Library,
-	) -> Result<
-		Symbol<
-			'a,
-			unsafe extern "C" fn(
-				config_name: *const c_char,
-				config_file: *const c_char,
-				config: isize,
-			) -> isize,
-		>,
-	> {
-		let func: Symbol<
-			unsafe extern "C" fn(
-				config_name: *const c_char,
-				config_file: *const c_char,
-				config: isize,
-			) -> isize,
-		>;
+	fn load_connector_new_symbol(library: &'a Library) -> Result<Symbol<'a, unsafe extern "C" fn(*const c_char, *const c_char, isize) -> isize>> {
+		let func: Symbol<unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>;
 
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
@@ -68,11 +43,7 @@ impl<'a> ConnextLibrary<'a> {
 		let value: isize;
 		let fn_connector_new = &self.connector_new_symbol;
 		unsafe {
-			value = fn_connector_new(
-				CString::new(config_name)?.as_ptr(),
-				CString::new(config_file)?.as_ptr(),
-				0,
-			);
+			value = fn_connector_new(CString::new(config_name)?.as_ptr(), CString::new(config_file)?.as_ptr(), 0);
 		}
 		return Ok(value);
 	}
@@ -108,32 +79,16 @@ impl Connector {
 		let library = load_connector_library()?;
 		let connector_handle = connector_new(&library, config_name, config_file)?;
 
-		return Ok(Connector {
-			library,
-			connector_handle,
-		});
+		return Ok(Connector { library, connector_handle });
 
 		fn load_connector_library() -> Result<Library> {
 			let library_path;
 
 			match std::env::consts::OS {
-				"windows" => {
-					library_path =
-						Path::new("rticonnextdds-connector/lib/x64Win64VS2013/rtiddsconnector.dll")
-				}
-				"macos" => {
-					library_path = Path::new(
-						"rticonnextdds-connector/lib/x64Darwin16clang8.0/librtiddsconnector.dylib",
-					)
-				}
-				"linux" => {
-					library_path = Path::new(
-						"rticonnextdds-connector/lib/x64Linux2.6gcc4.4.5/librtiddsconnector.so",
-					)
-				}
-				"android" => library_path = Path::new(
-					"rticonnextdds-connector/lib/armv6vfphLinux3.xgcc4.7.2/librtiddsconnector.so",
-				),
+				"windows" => library_path = Path::new("rticonnextdds-connector/lib/x64Win64VS2013/rtiddsconnector.dll"),
+				"macos" => library_path = Path::new("rticonnextdds-connector/lib/x64Darwin16clang8.0/librtiddsconnector.dylib"),
+				"linux" => library_path = Path::new("rticonnextdds-connector/lib/x64Linux2.6gcc4.4.5/librtiddsconnector.so"),
+				"android" => library_path = Path::new("rticonnextdds-connector/lib/armv6vfphLinux3.xgcc4.7.2/librtiddsconnector.so"),
 				_ => panic!("Current platform not supported."),
 			}
 
@@ -144,19 +99,9 @@ impl Connector {
 			let connector_handle: isize;
 
 			unsafe {
-				let func: Symbol<
-					unsafe extern "C" fn(
-						config_name: *const c_char,
-						config_file: *const c_char,
-						config: isize,
-					) -> isize,
-				> = library.get(b"RTIDDSConnector_new")?;
+				let func: Symbol<unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize> = library.get(b"RTIDDSConnector_new")?;
 
-				connector_handle = func(
-					CString::new(config_name)?.as_ptr(),
-					CString::new(config_file)?.as_ptr(),
-					0,
-				);
+				connector_handle = func(CString::new(config_name)?.as_ptr(), CString::new(config_file)?.as_ptr(), 0);
 			}
 
 			if connector_handle == 0 {
@@ -167,10 +112,7 @@ impl Connector {
 		}
 	}
 
-	fn _wait(
-		&self,
-		timeout: Option<Duration>,
-	) -> std::result::Result<(), Box<dyn std::error::Error>> {
+	fn _wait(&self, timeout: Option<Duration>) -> std::result::Result<(), Box<dyn std::error::Error>> {
 		let timeout_millis: i32;
 
 		match timeout {
@@ -181,9 +123,7 @@ impl Connector {
 		let return_code: i32;
 
 		unsafe {
-			let func: Symbol<
-				unsafe extern "C" fn(connector_handle: isize, timeout_millis: i32) -> i32,
-			> = self.library.get(b"RTIDDSConnector_wait").unwrap();
+			let func: Symbol<unsafe extern "C" fn(connector_handle: isize, timeout_millis: i32) -> i32> = self.library.get(b"RTIDDSConnector_wait").unwrap();
 			return_code = func(self.connector_handle, timeout_millis)
 		}
 
@@ -198,8 +138,7 @@ impl Connector {
 impl Drop for Connector {
 	fn drop(&mut self) {
 		unsafe {
-			let func: Symbol<unsafe extern "C" fn(connector_handle: isize)> =
-				self.library.get(b"RTIDDSConnector_delete").unwrap();
+			let func: Symbol<unsafe extern "C" fn(connector_handle: isize)> = self.library.get(b"RTIDDSConnector_delete").unwrap();
 			func(self.connector_handle);
 		}
 	}
