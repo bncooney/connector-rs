@@ -1,9 +1,6 @@
 use std::{
-	// convert::TryInto,
-	// ffi::{CStr, CString},
 	fmt::Display,
 	os::raw::c_char,
-	// time::Duration,
 };
 
 pub mod connector;
@@ -14,7 +11,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Sync + Send>
 #[macro_use]
 extern crate num_derive;
 use num_derive::FromPrimitive;
-// use num_traits::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
@@ -100,16 +96,3 @@ pub enum ReturnCode {
 	Timeout = 10,
 	NoData = 11,
 }
-
-// #[derive(Debug)]
-// pub struct Writer {
-// 	writer_handle: isize,
-// }
-
-// impl PartialEq for Writer {
-// 	fn eq(&self, other: &Self) -> bool {
-// 		self.writer_handle == other.writer_handle
-// 	}
-// }
-
-// impl Eq for Writer {}
