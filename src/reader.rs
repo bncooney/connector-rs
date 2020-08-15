@@ -1,13 +1,17 @@
 use std::{
-	ffi::CString
+    convert::TryInto,
+    ffi::CString,
+    time::Duration,
 };
 
-use super::{ConnextLibrary, Result, connector::Connector};
+use super::{ConnextLibrary, Entity, Result, ReturnCode, connector::Connector, Handle, NULL_HANDLE, Timeout};
+
+use num_traits::FromPrimitive;
 
 #[derive(Debug)]
 pub struct Reader<'library> {
     library: &'library ConnextLibrary<'library>,
-	reader_handle: isize,
+	reader_handle: Handle,
 }
 
 impl<'library> Reader<'library> {
@@ -15,18 +19,40 @@ impl<'library> Reader<'library> {
         let entity_name = CString::new(entity_name)?;
 		let reader_new = &library.reader_new_symbol;
 
-        let reader_handle: isize;
+        let reader_handle: Handle;
 		unsafe {
 			reader_handle = reader_new(connector.connector_handle, entity_name.as_ptr());
         }
         
-		if reader_handle == 0 {
+		if reader_handle == NULL_HANDLE {
             // Safe to unwrap, &str -> CString -> &str conversion
 			return Err(format!("Couldnt create reader, {}", entity_name.to_str().unwrap()).into());
 		}
 
 		Ok(Self { library, reader_handle })
-	}
+    }
+    
+    pub fn wait(&self, timeout: Option<Duration>) -> Result<()> {
+        let timeout_millis: i32;
+
+		match timeout {
+			Some(x) => timeout_millis = x.as_millis().try_into().unwrap_or(std::i32::MAX),
+			None => timeout_millis = -1,
+		}
+
+		let return_code: i32;
+        let func = &self.library.reader_wait_symbol;
+
+		unsafe {
+            return_code = func(self.reader_handle, timeout_millis);
+		}
+
+		match ReturnCode::from_i32(return_code) {
+			Some(ReturnCode::Ok) => return Ok(()),
+			Some(ReturnCode::Timeout) => return Err(Box::new(Timeout{entity: Entity::Reader})),
+			_ => return Err("Unexpected error occured in Connector::wait".into()),
+		}
+    }
 }
 
 impl<'library> Drop for Reader<'library> {

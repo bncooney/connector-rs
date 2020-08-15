@@ -18,11 +18,15 @@ use num_derive::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
+type Handle = isize;
+const NULL_HANDLE: Handle = 0;
+
 #[derive(Debug)]
 pub struct ConnextLibrary<'library> {
-	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>,
-	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: isize)>,
-	reader_new_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: isize, entity_name: *const c_char) -> isize>,
+	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: i32) -> Handle>,
+	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Handle)>,
+	reader_new_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Handle, entity_name: *const c_char) -> Handle>,
+	reader_wait_symbol: Symbol<'library, unsafe extern "C" fn(reader_handle: Handle, timeout: i32) -> i32>,
 }
 
 impl<'library> ConnextLibrary<'library> {
@@ -32,10 +36,11 @@ impl<'library> ConnextLibrary<'library> {
 			connector_new_symbol: ConnextLibrary::load_connector_new_symbol(library)?,
 			connector_delete_symbol: ConnextLibrary::load_connector_delete_symbol(library)?,
 			reader_new_symbol: ConnextLibrary::load_reader_new_symbol(library)?,
+			reader_wait_symbol: ConnextLibrary::load_reader_wait_symbol(library)?,
 		})
 	}
 
-	fn load_connector_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(*const c_char, *const c_char, isize) -> isize>> {
+	fn load_connector_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(*const c_char, *const c_char, i32) -> Handle>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
@@ -43,7 +48,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_connector_delete_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(connector_handle: isize)>> {
+	fn load_connector_delete_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle)>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_delete")?;
@@ -51,7 +56,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_reader_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(connector_handle: isize, entity_name: *const c_char) -> isize>> {
+	fn load_reader_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle, *const c_char) -> Handle>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getReader")?;
@@ -59,22 +64,38 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
+	fn load_reader_wait_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle, i32) -> i32>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTI_Connector_wait_for_data_on_reader")?;
+		}
+		return Ok(func);
+	}
+
 }
 
 #[derive(Debug)]
-pub struct TimeoutError;
+pub(crate) enum Entity {
+	Connector,
+	Reader,
+	Writer,
+}
 
-impl Display for TimeoutError {
+#[derive(Debug)]
+pub(crate) struct Timeout {
+	entity: Entity,
+}
+
+impl Display for Timeout {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		// TODO: Add subject enum (Connector / Participant, Reader)?
-		write!(f, "{}", "Connector wait timed out.")
+		write!(f, "{:?} wait timed out", &self.entity)
 	}
 }
 
-impl std::error::Error for TimeoutError {}
+impl std::error::Error for Timeout {}
 
 #[derive(FromPrimitive, ToPrimitive)]
-enum ReturnCode {
+pub enum ReturnCode {
 	Ok = 0,
 	Timeout = 10,
 	NoData = 11,

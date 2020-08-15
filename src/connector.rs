@@ -33,9 +33,9 @@ impl<'library> Connector<'library> {
 
 impl<'library> Drop for Connector<'library> {
 	fn drop(&mut self) {
-		let fn_connector_delete = &self.library.connector_delete_symbol;
+		let connector_delete = &self.library.connector_delete_symbol;
 		unsafe {
-			fn_connector_delete(self.connector_handle);
+			connector_delete(self.connector_handle);
 		}
 	}
 }
