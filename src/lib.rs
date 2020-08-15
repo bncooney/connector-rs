@@ -1,34 +1,38 @@
 use std::{
-	convert::TryInto,
-	ffi::{CStr, CString},
+	// convert::TryInto,
+	// ffi::{CStr, CString},
 	fmt::Display,
 	os::raw::c_char,
-	path::Path,
-	time::{Duration, Instant},
+	// path::Path,
+	// time::Duration,
 };
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+pub mod connector;
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Sync + Send>>;
 
 #[macro_use]
 extern crate num_derive;
 use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
+// use num_traits::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
 #[derive(Debug)]
-pub struct ConnextLibrary<'a> {
-	connector_new_symbol: Symbol<'a, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>,
+pub struct ConnextLibrary<'library> {
+	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>,
+	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: isize)>,
 }
 
-impl<'a> ConnextLibrary<'a> {
-	pub fn new(library: &'a Library) -> Result<Self> {
+impl<'library> ConnextLibrary<'library> {
+	pub fn new(library: &'library Library) -> Result<Self> {
 		Ok(ConnextLibrary {
 			connector_new_symbol: ConnextLibrary::load_connector_new_symbol(library)?,
+			connector_delete_symbol: ConnextLibrary::load_connector_delete_symbol(library)?,
 		})
 	}
 
-	fn load_connector_new_symbol(library: &'a Library) -> Result<Symbol<'a, unsafe extern "C" fn(*const c_char, *const c_char, isize) -> isize>> {
+	fn load_connector_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(*const c_char, *const c_char, isize) -> isize>> {
 		let func: Symbol<unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize>;
 
 		unsafe {
@@ -38,110 +42,34 @@ impl<'a> ConnextLibrary<'a> {
 		return Ok(func);
 	}
 
-	// TODO: Return strongly typed Connector (move into Connector::new)
-	pub fn connector_new(&self, config_name: &str, config_file: &str) -> Result<isize> {
-		let value: isize;
-		let fn_connector_new = &self.connector_new_symbol;
+	fn load_connector_delete_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(connector_handle: isize)>> {
+		let func: Symbol<unsafe extern "C" fn(connector_handle: isize)>;
+
 		unsafe {
-			value = fn_connector_new(CString::new(config_name)?.as_ptr(), CString::new(config_file)?.as_ptr(), 0);
+			func = library.get(b"RTIDDSConnector_delete")?;
 		}
-		return Ok(value);
+
+		return Ok(func);
 	}
 }
 
 #[derive(Debug)]
-pub struct Timeout;
+pub struct TimeoutError;
 
-impl Display for Timeout {
+impl Display for TimeoutError {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		// TODO: Add subject enum (Connector / Participant, Reader)?
 		write!(f, "{}", "Connector wait timed out.")
 	}
 }
 
-impl std::error::Error for Timeout {}
+impl std::error::Error for TimeoutError {}
 
 #[derive(FromPrimitive, ToPrimitive)]
 enum ReturnCode {
 	Ok = 0,
 	Timeout = 10,
 	NoData = 11,
-}
-
-#[derive(Debug)]
-pub struct Connector {
-	library: Library,
-	connector_handle: isize,
-}
-
-impl Connector {
-	pub fn new(config_name: &str, config_file: &str) -> Result<Self> {
-		let library = load_connector_library()?;
-		let connector_handle = connector_new(&library, config_name, config_file)?;
-
-		return Ok(Connector { library, connector_handle });
-
-		fn load_connector_library() -> Result<Library> {
-			let library_path;
-
-			match std::env::consts::OS {
-				"windows" => library_path = Path::new("rticonnextdds-connector/lib/x64Win64VS2013/rtiddsconnector.dll"),
-				"macos" => library_path = Path::new("rticonnextdds-connector/lib/x64Darwin16clang8.0/librtiddsconnector.dylib"),
-				"linux" => library_path = Path::new("rticonnextdds-connector/lib/x64Linux2.6gcc4.4.5/librtiddsconnector.so"),
-				"android" => library_path = Path::new("rticonnextdds-connector/lib/armv6vfphLinux3.xgcc4.7.2/librtiddsconnector.so"),
-				_ => panic!("Current platform not supported."),
-			}
-
-			Ok(Library::new(&library_path)?)
-		}
-
-		fn connector_new(library: &Library, config_name: &str, config_file: &str) -> Result<isize> {
-			let connector_handle: isize;
-
-			unsafe {
-				let func: Symbol<unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: isize) -> isize> = library.get(b"RTIDDSConnector_new")?;
-
-				connector_handle = func(CString::new(config_name)?.as_ptr(), CString::new(config_file)?.as_ptr(), 0);
-			}
-
-			if connector_handle == 0 {
-				return Err("Couldn't create RTI DDS connection, see stderr.".into());
-			}
-
-			Ok(connector_handle)
-		}
-	}
-
-	fn _wait(&self, timeout: Option<Duration>) -> std::result::Result<(), Box<dyn std::error::Error>> {
-		let timeout_millis: i32;
-
-		match timeout {
-			Some(x) => timeout_millis = x.as_millis().try_into().unwrap_or(std::i32::MAX),
-			None => timeout_millis = -1,
-		}
-
-		let return_code: i32;
-
-		unsafe {
-			let func: Symbol<unsafe extern "C" fn(connector_handle: isize, timeout_millis: i32) -> i32> = self.library.get(b"RTIDDSConnector_wait").unwrap();
-			return_code = func(self.connector_handle, timeout_millis)
-		}
-
-		match ReturnCode::from_i32(return_code) {
-			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::Timeout) => return Err(Box::new(Timeout)),
-			_ => return Err("Unexpected error occured in Connector::wait".into()),
-		}
-	}
-}
-
-impl Drop for Connector {
-	fn drop(&mut self) {
-		unsafe {
-			let func: Symbol<unsafe extern "C" fn(connector_handle: isize)> = self.library.get(b"RTIDDSConnector_delete").unwrap();
-			func(self.connector_handle);
-		}
-	}
 }
 
 #[derive(Debug)]
