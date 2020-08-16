@@ -14,15 +14,18 @@ use num_derive::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
-type Handle = isize;
-const NULL_HANDLE: Handle = 0;
+type Ptr = isize;
+const NULL_PTR: Ptr = 0;
+type CString = *const c_char;
 
 #[derive(Debug)]
 pub struct ConnextLibrary<'library> {
-	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: *const c_char, config_file: *const c_char, config: i32) -> Handle>,
-	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Handle)>,
-	reader_new_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Handle, entity_name: *const c_char) -> Handle>,
-	reader_wait_symbol: Symbol<'library, unsafe extern "C" fn(reader_handle: Handle, timeout: i32) -> i32>,
+	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: CString, config_file: CString, config: i32) -> Ptr>,
+	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr)>,
+	reader_new_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> Ptr>,
+	reader_wait_symbol: Symbol<'library, unsafe extern "C" fn(reader_handle: Ptr, timeout: i32) -> i32>,
+	take_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> i32>,
+	read_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> i32>,
 }
 
 impl<'library> ConnextLibrary<'library> {
@@ -33,10 +36,12 @@ impl<'library> ConnextLibrary<'library> {
 			connector_delete_symbol: ConnextLibrary::load_connector_delete_symbol(library)?,
 			reader_new_symbol: ConnextLibrary::load_reader_new_symbol(library)?,
 			reader_wait_symbol: ConnextLibrary::load_reader_wait_symbol(library)?,
+			take_symbol: ConnextLibrary::load_take_symbol(library)?,
+			read_symbol: ConnextLibrary::load_read_symbol(library)?,
 		})
 	}
 
-	fn load_connector_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(*const c_char, *const c_char, i32) -> Handle>> {
+	fn load_connector_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(CString, CString, i32) -> Ptr>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
@@ -44,7 +49,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_connector_delete_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle)>> {
+	fn load_connector_delete_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr)>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_delete")?;
@@ -52,7 +57,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_reader_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle, *const c_char) -> Handle>> {
+	fn load_reader_new_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> Ptr>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getReader")?;
@@ -60,21 +65,36 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_reader_wait_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Handle, i32) -> i32>> {
+	fn load_reader_wait_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, i32) -> i32>> {
 		let func;
 		unsafe {
-			func = library.get(b"RTI_Connector_wait_for_data_on_reader")?;
+			func = library.get(b"RTIDDSConnectorReaders_waitForData")?;
+		}
+		return Ok(func);
+	}
+	
+	fn load_take_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> i32>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_take")?;
 		}
 		return Ok(func);
 	}
 
+	fn load_read_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> i32>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_read")?;
+		}
+		return Ok(func);
+	}
 }
 
 #[derive(Debug)]
 pub(crate) enum Entity {
-	Connector,
+	_Connector,
 	Reader,
-	Writer,
+	_Writer,
 }
 
 #[derive(Debug)]
@@ -95,4 +115,22 @@ pub enum ReturnCode {
 	Ok = 0,
 	Timeout = 10,
 	NoData = 11,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::path::Path;
+	use libloading::Library;
+
+	#[test]
+	// Creates a new instance of the ConnextLibrary, loading all symbols from the rtiddsconnector assembly
+    fn test_load_symbols() -> Result<()> {
+		// FIXME
+		let library = Library::new(Path::new("rticonnextdds-connector/lib/x64Darwin16clang8.0/librtiddsconnector.dylib"))?;
+		
+		ConnextLibrary::new(&library)?;
+		
+		Ok(())
+    }
 }
