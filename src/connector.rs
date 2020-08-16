@@ -1,11 +1,11 @@
 use std::ffi::CString;
 
-use super::{ConnextLibrary, Result};
+use super::{ConnextLibrary, Result, Ptr, NULL_PTR};
 
 #[derive(Debug)]
 pub struct Connector<'library> {
 	library: &'library ConnextLibrary<'library>,
-	pub(crate) connector_handle: isize,
+	pub(crate) connector_handle: Ptr,
 }
 
 impl<'library> Connector<'library> {
@@ -13,14 +13,14 @@ impl<'library> Connector<'library> {
 		let config_name = CString::new(config_name)?;
 		let config_file = CString::new(config_file)?;
 
-		let connector_handle: isize;
+		let connector_handle: Ptr;
 		let connector_new = &library.connector_new_symbol;
 
 		unsafe {
 			connector_handle = connector_new(config_name.as_ptr(), config_file.as_ptr(), 0);
 		}
 
-		if connector_handle == 0 {
+		if connector_handle == NULL_PTR {
 			// Safe to unwrap, &str -> CString -> &str conversion
 			return Err(format!("Couldnt create connector, {}", config_name.to_str().unwrap()).into());
 		}

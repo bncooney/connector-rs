@@ -10,22 +10,26 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Sync + Send>
 
 #[macro_use]
 extern crate num_derive;
-use num_derive::FromPrimitive;
 
 use libloading::{Library, Symbol};
 
 type Ptr = isize;
 const NULL_PTR: Ptr = 0;
 type CString = *const c_char;
+type ReturnCode = i32;
+type Duration = i32;
+type SamplesLength = f64; // TODO: Look into why "samples length" is a double
 
 #[derive(Debug)]
 pub struct ConnextLibrary<'library> {
 	connector_new_symbol: Symbol<'library, unsafe extern "C" fn(config_name: CString, config_file: CString, config: i32) -> Ptr>,
 	connector_delete_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr)>,
 	reader_new_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> Ptr>,
-	reader_wait_symbol: Symbol<'library, unsafe extern "C" fn(reader_handle: Ptr, timeout: i32) -> i32>,
-	take_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> i32>,
-	read_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> i32>,
+	reader_wait_symbol: Symbol<'library, unsafe extern "C" fn(reader_handle: Ptr, timeout: Duration) -> ReturnCode>,
+	take_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> ReturnCode>,
+	read_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> ReturnCode>,
+	get_samples_length_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle:Ptr, entity_name: CString) -> SamplesLength>,
+	get_json_sample_symbol: Symbol<'library, unsafe extern "C" fn(connector_handle:Ptr, entity_name: CString, index: i32) -> CString>,
 }
 
 impl<'library> ConnextLibrary<'library> {
@@ -38,6 +42,8 @@ impl<'library> ConnextLibrary<'library> {
 			reader_wait_symbol: ConnextLibrary::load_reader_wait_symbol(library)?,
 			take_symbol: ConnextLibrary::load_take_symbol(library)?,
 			read_symbol: ConnextLibrary::load_read_symbol(library)?,
+			get_samples_length_symbol: ConnextLibrary::load_get_samples_length_symbol(library)?,
+			get_json_sample_symbol: ConnextLibrary::load_get_json_sample_symbol(library)?,
 		})
 	}
 
@@ -65,7 +71,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_reader_wait_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, i32) -> i32>> {
+	fn load_reader_wait_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, Duration) -> ReturnCode>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnectorReaders_waitForData")?;
@@ -73,7 +79,7 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 	
-	fn load_take_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> i32>> {
+	fn load_take_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> ReturnCode>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_take")?;
@@ -81,10 +87,26 @@ impl<'library> ConnextLibrary<'library> {
 		return Ok(func);
 	}
 
-	fn load_read_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> i32>> {
+	fn load_read_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> ReturnCode>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_read")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_get_samples_length_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString) -> SamplesLength>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_getSamplesLength")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_get_json_sample_symbol(library: &'library Library) -> Result<Symbol<'library, unsafe extern "C" fn(Ptr, CString, i32) -> CString>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_getJSONSample")?;
 		}
 		return Ok(func);
 	}
@@ -109,13 +131,6 @@ impl Display for Timeout {
 }
 
 impl std::error::Error for Timeout {}
-
-#[derive(FromPrimitive, ToPrimitive)]
-pub enum ReturnCode {
-	Ok = 0,
-	Timeout = 10,
-	NoData = 11,
-}
 
 #[cfg(test)]
 mod tests {
