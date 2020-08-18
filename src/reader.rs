@@ -1,7 +1,8 @@
 use std::{convert::TryInto, ffi::{CString, CStr}, time::Duration, os::raw::c_char};
 
-use super::{connector::Connector, ConnextLibrary, Entity, Ptr, Result, Timeout, NULL_PTR};
+use super::{connector::Connector, ConnextLibrary, Entity as EntityType, Result, Timeout, entity::Entity};
 
+use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
 #[derive(FromPrimitive, ToPrimitive)]
@@ -12,34 +13,43 @@ pub enum ReturnCode {
 }
 
 #[derive(Debug)]
-pub struct Reader<'library, 'connector> {
-	connector: &'connector Connector<'connector>,
-	entity_name: CString,
-	library: &'library ConnextLibrary<'library>,
-	reader_handle: Ptr,
+pub struct Reader<'lib, 'a> {
+	connector: &'a Connector<'a>,
+	pub(crate) entity_name: CString,
+	library: &'lib ConnextLibrary<'lib>,
+	reader_handle: isize,
 }
 
-impl<'library, 'connector> Reader<'library, 'connector> {
-	pub fn new(library: &'library ConnextLibrary, connector: &'connector Connector, entity_name: &str) -> Result<Self> {
-		let entity_name_cstring = CString::new(entity_name)?;
-		let reader_new = &library.reader_new_symbol;
-		let reader_handle: Ptr;
+impl Entity for Reader<'_, '_> {
+	fn entity_name(&self) -> CString {
+		self.entity_name.to_owned()
+	}
+}
+
+impl<'lib, 'a> Reader<'lib, 'a> {
+	pub fn new(library: &'lib ConnextLibrary, connector: &'a Connector, entity_name: &str) -> Result<Self> {
+		let entity_name = CString::new(entity_name)?;
+		let func = &library.reader_new_symbol;
+		let reader_handle: isize;
 
 		unsafe {
-			reader_handle = reader_new(connector.connector_handle, entity_name_cstring.as_ptr());
+			reader_handle = func(connector.connector_handle, entity_name.as_ptr());
 		}
-		if reader_handle == NULL_PTR {
-			return Err(format!("Couldnt create reader, {}", entity_name).into());
+		if reader_handle == 0 {
+			// Safe to unwrap, &str -> CString -> &str conversion
+			return Err(format!("Couldnt create reader, {}", entity_name.to_str().unwrap()).into());
 		}
 
 		Ok(Self {
 			connector,
-			entity_name: entity_name_cstring,
+			entity_name,
 			library,
 			reader_handle,
 		})
 	}
+}
 
+impl Reader<'_, '_> {
 	pub fn wait(&self, timeout: Option<Duration>) -> Result<()> {
 		let timeout_millis: i32;
 		match timeout {
@@ -56,7 +66,7 @@ impl<'library, 'connector> Reader<'library, 'connector> {
 
 		match ReturnCode::from_i32(return_code) {
 			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::Timeout) => return Err(Box::new(Timeout { entity: Entity::Reader })),
+			Some(ReturnCode::Timeout) => return Err(Box::new(Timeout { entity: EntityType::Reader })),
 			_ => return Err(format!("{}:{}", "Unexpected error occured in Reader::wait", return_code).into()),
 		}
 	}
@@ -99,7 +109,7 @@ impl<'library, 'connector> Reader<'library, 'connector> {
 	// TODO: Return json object from Serde, or introduce this is a "friendlier" layer?
 	pub fn get_json_sample(&self, index: i32) -> Result<String> {
 		if index < 1 {
-			return Err(format!("{}", "Connext sample index start at 1, "))
+			return Err(format!("{}", "Connext sample index start at 1, ").into())
 		}
 
 		// TODO: Decide where to introduce "safety", segfault will occur on this operation if the index > samples_length
@@ -119,13 +129,13 @@ impl<'library, 'connector> Reader<'library, 'connector> {
 	}
 }
 
-impl<'library, 'connector> PartialEq for Reader<'library, 'connector> {
+impl PartialEq for Reader<'_, '_> {
 	fn eq(&self, other: &Self) -> bool {
 		self.reader_handle == other.reader_handle
 	}
 }
 
-impl<'library, 'connector> Eq for Reader<'library, 'connector> {}
+impl Eq for Reader<'_, '_> {}
 
 enum SampleOperation {
 	Take,
