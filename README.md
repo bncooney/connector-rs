@@ -5,10 +5,9 @@
 1. Create crate to enable async patterns (Futures, Stream etc.)
 1. Update class layout (diagram)
 1. Add type generation, write .idl parser using "nom"
-1. Decide on generic type handling in abstraction layer
 
 ## Dev Issues:
-1. Decide if **this** crate should provide relative safety, or a direct interface to the Connext API on which a more ergonomic interface can be written.
+1. Decide on generic type handling in abstraction layer
 1. "Wait for acknowledgements" will be a limited API if there isnt a convenient method to interrogate QoS. (Decide whether to call into DDS "core" library symbols)
 
 ## Design Decisions (and observations on Rust)
