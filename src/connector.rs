@@ -1,12 +1,22 @@
-use std::ffi::CString;
 use num_traits::FromPrimitive;
+use std::{
+	ffi::{CStr, CString},
+	os::raw::c_char,
+};
 
-use super::{reader::{Reader, ReturnCode}, ConnextLibrary, Result};
+use super::{
+	entity::Entity,
+	error::NoData,
+	reader::{Reader, ReturnCode},
+	writer::Writer,
+	ConnextLibrary, Entity as EntityType, Result, Operation,
+};
 
 #[derive(Debug)]
 pub struct Connector<'lib> {
 	library: &'lib ConnextLibrary<'lib>,
 	pub(crate) connector_handle: isize,
+	config_name: CString,
 }
 
 impl<'lib> Connector<'lib> {
@@ -26,13 +36,52 @@ impl<'lib> Connector<'lib> {
 			return Err(format!("Couldnt create connector, {}", config_name.to_str().unwrap()).into());
 		}
 
-		Ok(Self { library, connector_handle })
+		Ok(Self {
+			library,
+			connector_handle,
+			config_name,
+		})
+	}
+}
+
+impl Entity for Connector<'_> {
+	fn entity_name(&self) -> CString {
+		self.config_name.to_owned()
+	}
+	fn entity_type() -> EntityType {
+		EntityType::Participant
 	}
 }
 
 impl Connector<'_> {
-	pub fn take(&self, reader: Reader) -> Result<()> {
-		let func = &self.library.take_symbol;
+	pub fn clear(&self, writer: &Writer) {
+		let func = &self.library.writer_clear_symbol;
+		unsafe {
+			func(self.connector_handle, writer.entity_name.as_ptr());
+		}
+	}
+
+	pub fn write(&self, writer: &Writer) {
+		let func = &self.library.writer_write_symbol;
+		unsafe {
+			func(self.connector_handle, writer.entity_name.as_ptr(), std::ptr::null());
+		}
+	}
+
+	pub fn take(&self, reader: &Reader) -> Result<()> {
+		self.next(reader, Operation::Take)
+	}
+
+	pub fn read(&self, reader: &Reader) -> Result<()> {
+		self.next(reader, Operation::Read)
+	}
+
+	fn next(&self, reader: &Reader, operation: Operation) -> Result<()> {
+		let func = match operation {
+			Operation::Take => &self.library.take_symbol,
+			Operation::Read => &self.library.read_symbol,
+		};
+
 		let return_code: i32;
 
 		unsafe {
@@ -41,9 +90,51 @@ impl Connector<'_> {
 
 		match ReturnCode::from_i32(return_code) {
 			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::NoData) => return Ok(()), //TODO: Log this as a logical error
-			_ => return Err(format!("{}:{}", "Unexpected error occured in Reader::next", return_code).into()),
+			Some(ReturnCode::NoData) => {
+				return Err(NoData {
+					entity: EntityType::Reader,
+					operation,
+				}
+				.into())
+			} //TODO: Log this as a logic error
+			_ => return Err(format!("{}:{}", "Unexpected error occured in Connector::take", return_code).into()),
 		}
+	}
+
+	pub fn get_samples_length(&self, reader: &Reader) -> Result<f64> {
+		let get_samples_length = &self.library.get_samples_length_symbol;
+		let samples: f64;
+		unsafe {
+			// TODO: Replace with "checked" version from js? (RTI_Connector_get_sample_count)
+			samples = get_samples_length(self.connector_handle, reader.entity_name.as_ptr());
+		}
+		Ok(samples)
+	}
+
+	pub fn get_json_sample(&self, reader: &Reader, index: i32) -> Result<String> {
+		if index < 1 {
+			return Err(format!("{}", "Connext sample index start at 1, ").into());
+		}
+
+		let get_json_sample = &self.library.get_json_sample_symbol;
+		let sample_ptr: *const c_char;
+		let sample: String;
+
+		unsafe {
+			// TODO: Replace with "checked" version from js?
+			sample_ptr = get_json_sample(self.connector_handle, reader.entity_name.as_ptr(), index);
+			sample = CStr::from_ptr(sample_ptr).to_string_lossy().into_owned();
+		}
+		Ok(sample)
+	}
+
+	pub fn set_json_instance(&self, writer: &Writer, json: &str) -> Result<()> {
+		let json = CString::new(json)?;
+		let func = &self.library.set_json_instance_symbol;
+		unsafe {
+			func(self.connector_handle, writer.entity_name.as_ptr(), json.as_ptr());
+		}
+		Ok(())
 	}
 }
 

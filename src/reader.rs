@@ -1,6 +1,10 @@
-use std::{convert::TryInto, ffi::{CString, CStr}, time::Duration, os::raw::c_char};
+use std::{
+	convert::TryInto,
+	ffi::CString,
+	time::Duration,
+};
 
-use super::{connector::Connector, ConnextLibrary, Entity as EntityType, Result, Timeout, entity::Entity};
+use super::{connector::Connector, entity::Entity, ConnextLibrary, Entity as EntityType, Result, error::Timeout};
 
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
@@ -13,43 +17,45 @@ pub enum ReturnCode {
 }
 
 #[derive(Debug)]
-pub struct Reader<'lib, 'a> {
-	connector: &'a Connector<'a>,
+pub struct Reader<'lib> {
 	pub(crate) entity_name: CString,
 	library: &'lib ConnextLibrary<'lib>,
-	reader_handle: isize,
+	handle: isize,
 }
 
-impl Entity for Reader<'_, '_> {
+impl Entity for Reader<'_> {
 	fn entity_name(&self) -> CString {
 		self.entity_name.to_owned()
 	}
+
+	fn entity_type() -> EntityType {
+		EntityType::Reader
+	}
 }
 
-impl<'lib, 'a> Reader<'lib, 'a> {
-	pub fn new(library: &'lib ConnextLibrary, connector: &'a Connector, entity_name: &str) -> Result<Self> {
+impl<'lib> Reader<'lib> {
+	pub fn new(library: &'lib ConnextLibrary, connector: &Connector, entity_name: &str) -> Result<Self> {
 		let entity_name = CString::new(entity_name)?;
 		let func = &library.reader_new_symbol;
-		let reader_handle: isize;
+		let handle: isize;
 
 		unsafe {
-			reader_handle = func(connector.connector_handle, entity_name.as_ptr());
+			handle = func(connector.connector_handle, entity_name.as_ptr());
 		}
-		if reader_handle == 0 {
+		if handle == 0 {
 			// Safe to unwrap, &str -> CString -> &str conversion
 			return Err(format!("Couldnt create reader, {}", entity_name.to_str().unwrap()).into());
 		}
 
 		Ok(Self {
-			connector,
 			entity_name,
 			library,
-			reader_handle,
+			handle,
 		})
 	}
 }
 
-impl Reader<'_, '_> {
+impl Reader<'_> {
 	pub fn wait(&self, timeout: Option<Duration>) -> Result<()> {
 		let timeout_millis: i32;
 		match timeout {
@@ -61,83 +67,21 @@ impl Reader<'_, '_> {
 		let reader_wait = &self.library.reader_wait_symbol;
 
 		unsafe {
-			return_code = reader_wait(self.reader_handle, timeout_millis);
+			return_code = reader_wait(self.handle, timeout_millis);
 		}
 
 		match ReturnCode::from_i32(return_code) {
 			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::Timeout) => return Err(Box::new(Timeout { entity: EntityType::Reader })),
+			Some(ReturnCode::Timeout) => return Err(Timeout { entity: EntityType::Reader }.into()),
 			_ => return Err(format!("{}:{}", "Unexpected error occured in Reader::wait", return_code).into()),
 		}
 	}
-
-	pub fn take(&self) -> Result<()> {
-		self.next(SampleOperation::Take)
-	}
-
-	pub fn read(&self) -> Result<()> {
-		self.next(SampleOperation::Read)
-	}
-
-	// TODO: Consider name with respect to calling convention, may be better placed to return Vec<Sample>
-	fn next(&self, operation: SampleOperation) -> Result<()> {
-		let operation = match operation {
-			SampleOperation::Take => &self.library.take_symbol,
-			SampleOperation::Read => &self.library.read_symbol,
-		};
-		let return_code: i32;
-		unsafe {
-			return_code = operation(self.connector.connector_handle, self.entity_name.as_ptr());
-		}
-		match ReturnCode::from_i32(return_code) {
-			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::NoData) => return Ok(()), //TODO: Log this as a logical error
-			_ => return Err(format!("{}:{}", "Unexpected error occured in Reader::next", return_code).into()),
-		}
-	}
-
-	pub fn get_samples_length(&self) -> Result<f64> {
-		let get_samples_length = &self.library.get_samples_length_symbol;
-		let samples: f64;
-		unsafe {
-			// TODO: Replace with "checked" version from js? (RTI_Connector_get_sample_count)
-			samples = get_samples_length(self.connector.connector_handle, self.entity_name.as_ptr());
-		}
-		Ok(samples)
-	}
-
-	// TODO: Return json object from Serde, or introduce this is a "friendlier" layer?
-	pub fn get_json_sample(&self, index: i32) -> Result<String> {
-		if index < 1 {
-			return Err(format!("{}", "Connext sample index start at 1, ").into())
-		}
-
-		// TODO: Decide where to introduce "safety", segfault will occur on this operation if the index > samples_length
-		// Should this crate provide a direct implementation of the API, or should it hide internals and do bounds checking?
-
-		let get_json_sample = &self.library.get_json_sample_symbol;
-		let sample_ptr: *const c_char;
-		let sample: String;
-
-		unsafe {
-			// TODO: Replace with "checked" version from js?
-			sample_ptr = get_json_sample(self.connector.connector_handle, self.entity_name.as_ptr(), index);
-			sample = CStr::from_ptr(sample_ptr).to_string_lossy().into_owned();
-		}
-		
-		Ok(sample)
-	}
 }
 
-impl PartialEq for Reader<'_, '_> {
+impl PartialEq for Reader<'_> {
 	fn eq(&self, other: &Self) -> bool {
-		self.reader_handle == other.reader_handle
+		self.handle == other.handle
 	}
 }
 
-impl Eq for Reader<'_, '_> {}
-
-enum SampleOperation {
-	Take,
-	Read,
-}
+impl Eq for Reader<'_> {}

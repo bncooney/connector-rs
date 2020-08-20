@@ -1,30 +1,31 @@
-use std::{error::Error, fmt::Display, os::raw::c_char};
+use std::os::raw::c_char;
 
 pub mod connector;
 pub mod entity;
 pub mod reader;
 pub mod writer;
 
-type Result<T> = std::result::Result<T, Box<dyn Error + Sync + Send>>;
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Sync + Send>>;
 
 use libloading::{Library, Symbol};
 
-type Ptr = isize;
 type CString = *const c_char;
-type ReturnCode = i32;
-type Duration = i32;
 type SamplesLength = f64; // TODO: Look into why "samples length" is a double
 
 #[derive(Debug)]
 pub struct ConnextLibrary<'lib> {
-	connector_new_symbol: Symbol<'lib, unsafe extern "C" fn(config_name: CString, config_file: CString, config: i32) -> Ptr>,
-	connector_delete_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr)>,
-	reader_new_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> Ptr>,
-	reader_wait_symbol: Symbol<'lib, unsafe extern "C" fn(reader_handle: Ptr, timeout: Duration) -> ReturnCode>,
-	take_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> ReturnCode>,
-	read_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> ReturnCode>,
-	get_samples_length_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString) -> SamplesLength>,
-	get_json_sample_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: Ptr, entity_name: CString, index: i32) -> CString>,
+	connector_new_symbol: Symbol<'lib, unsafe extern "C" fn(config_name: CString, config_file: CString, config: i32) -> isize>,
+	connector_delete_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize)>,
+	reader_new_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> isize>,
+	writer_new_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> isize>,
+	reader_wait_symbol: Symbol<'lib, unsafe extern "C" fn(reader_handle: isize, timeout: i32) -> i32>,
+	writer_clear_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString)>,
+	take_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> i32>,
+	read_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> i32>,
+	writer_write_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString, params_json: CString)>,
+	get_samples_length_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> SamplesLength>,
+	get_json_sample_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString, index: i32) -> CString>,
+	set_json_instance_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString, json: CString)>,
 }
 
 impl<'lib> ConnextLibrary<'lib> {
@@ -33,17 +34,21 @@ impl<'lib> ConnextLibrary<'lib> {
 			connector_new_symbol: ConnextLibrary::load_connector_new_symbol(library)?,
 			connector_delete_symbol: ConnextLibrary::load_connector_delete_symbol(library)?,
 			reader_new_symbol: ConnextLibrary::load_reader_new_symbol(library)?,
+			writer_new_symbol: ConnextLibrary::load_writer_new_symbol(library)?,
 			reader_wait_symbol: ConnextLibrary::load_reader_wait_symbol(library)?,
+			writer_clear_symbol: ConnextLibrary::load_writer_clear_symbol(library)?,
 			take_symbol: ConnextLibrary::load_take_symbol(library)?,
 			read_symbol: ConnextLibrary::load_read_symbol(library)?,
+			writer_write_symbol: ConnextLibrary::load_writer_write_symbol(library)?,
 			get_samples_length_symbol: ConnextLibrary::load_get_samples_length_symbol(library)?,
 			get_json_sample_symbol: ConnextLibrary::load_get_json_sample_symbol(library)?,
+			set_json_instance_symbol: ConnextLibrary::load_set_json_instance(library)?,
 		})
 	}
 }
 
 impl ConnextLibrary<'_> {
-	fn load_connector_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(CString, CString, i32) -> Ptr>> {
+	fn load_connector_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(CString, CString, i32) -> isize>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
@@ -51,7 +56,7 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_connector_delete_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr)>> {
+	fn load_connector_delete_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize)>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_delete")?;
@@ -59,7 +64,7 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_reader_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, CString) -> Ptr>> {
+	fn load_reader_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> isize>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getReader")?;
@@ -67,14 +72,31 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_reader_wait_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, Duration) -> ReturnCode>> {
+	fn load_writer_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> isize>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_getWriter")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_reader_wait_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, i32) -> i32>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnectorReaders_waitForData")?;
 		}
 		return Ok(func);
 	}
-	fn load_take_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, CString) -> ReturnCode>> {
+
+	fn load_writer_clear_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString)>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_clear")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_take_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> i32>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_take")?;
@@ -82,7 +104,7 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_read_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, CString) -> ReturnCode>> {
+	fn load_read_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> i32>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_read")?;
@@ -90,7 +112,15 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_get_samples_length_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, CString) -> SamplesLength>> {
+	fn load_writer_write_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_write")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_get_samples_length_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> SamplesLength>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getSamplesLength")?;
@@ -98,34 +128,67 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_get_json_sample_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(Ptr, CString, i32) -> CString>> {
+	fn load_get_json_sample_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, i32) -> CString>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getJSONSample")?;
 		}
 		return Ok(func);
 	}
+
+	fn load_set_json_instance(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_setJSONInstance")?;
+		}
+		return Ok(func);
+	} 
 }
 
 #[derive(Debug)]
-pub(crate) enum Entity {
-	_Connector,
+pub enum Entity {
+	Participant,
 	Reader,
-	_Writer,
+	Writer,
 }
 
 #[derive(Debug)]
-pub(crate) struct Timeout {
-	entity: Entity,
+pub(crate) enum Operation {
+	Take,
+	Read,
 }
 
-impl Display for Timeout {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{:?} wait timed out", &self.entity)
+mod error {
+	use super::{Entity, Operation};
+	use std::fmt::Display;
+
+	#[derive(Debug)]
+	pub(crate) struct Timeout {
+		pub(crate) entity: Entity,
 	}
-}
 
-impl Error for Timeout {}
+	impl Display for Timeout {
+		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+			write!(f, "{:?} wait timed out.", &self.entity)
+		}
+	}
+
+	impl std::error::Error for Timeout {}
+
+	#[derive(Debug)]
+	pub(crate) struct NoData {
+		pub(crate) entity: Entity,
+		pub(crate) operation: Operation,
+	}
+
+	impl Display for NoData {
+		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+			write!(f, "{:?} called on {:?} returned no data.", &self.operation, &self.entity)
+		}
+	}
+
+	impl std::error::Error for NoData {}
+}
 
 #[cfg(test)]
 mod tests {
