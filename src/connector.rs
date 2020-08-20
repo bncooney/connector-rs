@@ -62,6 +62,7 @@ impl Connector<'_> {
 	}
 
 	pub fn write(&self, writer: &Writer) {
+		// TODO: Does write need to free written string? Check js example
 		let func = &self.library.writer_write_symbol;
 		unsafe {
 			func(self.connector_handle, writer.entity_name.as_ptr(), std::ptr::null());
@@ -121,20 +122,31 @@ impl Connector<'_> {
 		let sample: String;
 
 		unsafe {
-			// TODO: Replace with "checked" version from js?
 			sample_ptr = get_json_sample(self.connector_handle, reader.entity_name.as_ptr(), index);
 			sample = CStr::from_ptr(sample_ptr).to_string_lossy().into_owned();
 		}
+
+		self.free_string(sample_ptr);
+
 		Ok(sample)
 	}
 
 	pub fn set_json_instance(&self, writer: &Writer, json: &str) -> Result<()> {
 		let json = CString::new(json)?;
+		let json_ptr = json.as_ptr(); // Bind to local as per as_ptr() warning to manage pointer lifetime
 		let func = &self.library.set_json_instance_symbol;
 		unsafe {
-			func(self.connector_handle, writer.entity_name.as_ptr(), json.as_ptr());
+			func(self.connector_handle, writer.entity_name.as_ptr(), json_ptr);
 		}
 		Ok(())
+	}
+
+	fn free_string(&self, string_ptr: *const c_char) {
+		let func = &self.library.free_string_symbol;
+
+		unsafe {
+			func(string_ptr);
+		}
 	}
 }
 
