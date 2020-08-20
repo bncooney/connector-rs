@@ -12,8 +12,19 @@ use num_traits::FromPrimitive;
 #[derive(FromPrimitive, ToPrimitive)]
 pub enum ReturnCode {
 	Ok = 0,
+	Error = 1,
+	Unsupported = 2,
+	BadParameter = 3,
+	PreconditionNotMet = 4,
+	OutOfResources = 5,
+	NotEnabled = 6,
+	InmutablePolicy = 7,
+	InconsistencyPolicy = 8,
+	AlreadyDeleted = 9,
 	Timeout = 10,
 	NoData = 11,
+	IllegalOperation = 12,
+	NotAllowedBySec = 13,
 }
 
 #[derive(Debug)]

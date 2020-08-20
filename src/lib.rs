@@ -26,6 +26,7 @@ pub struct ConnextLibrary<'lib> {
 	get_samples_length_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString) -> SamplesLength>,
 	get_json_sample_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString, index: i32) -> CString>,
 	set_json_instance_symbol: Symbol<'lib, unsafe extern "C" fn(connector_handle: isize, entity_name: CString, json: CString)>,
+	free_string_symbol: Symbol<'lib, unsafe extern "C" fn(CString)>,
 }
 
 impl<'lib> ConnextLibrary<'lib> {
@@ -42,7 +43,8 @@ impl<'lib> ConnextLibrary<'lib> {
 			writer_write_symbol: ConnextLibrary::load_writer_write_symbol(library)?,
 			get_samples_length_symbol: ConnextLibrary::load_get_samples_length_symbol(library)?,
 			get_json_sample_symbol: ConnextLibrary::load_get_json_sample_symbol(library)?,
-			set_json_instance_symbol: ConnextLibrary::load_set_json_instance(library)?,
+			set_json_instance_symbol: ConnextLibrary::load_set_json_instance_symbol(library)?,
+			free_string_symbol: ConnextLibrary::load_free_string_symbol(library)?,
 		})
 	}
 }
@@ -136,10 +138,18 @@ impl ConnextLibrary<'_> {
 		return Ok(func);
 	}
 
-	fn load_set_json_instance(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
+	fn load_set_json_instance_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
 		let func;
 		unsafe {
 			func = library.get(b"RTIDDSConnector_setJSONInstance")?;
+		}
+		return Ok(func);
+	}
+
+	fn load_free_string_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(CString)>> {
+		let func;
+		unsafe {
+			func = library.get(b"RTIDDSConnector_freeString")?;
 		}
 		return Ok(func);
 	} 
