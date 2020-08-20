@@ -1,6 +1,11 @@
 ## TODO:
+1. Add and implement "get_last_error"
+1. Add appropriate ReturnCode handling
+1. Improve consistency; "pointer" and "handle"
 1. Create crate to enable async patterns (Futures, Stream etc.)
-1. Further develop class layout (diagram)
+1. Update class layout (diagram)
+1. Add type generation, write .idl parser using "nom"
+1. Decide on generic type handling in abstraction layer
 
 ## Dev Issues:
 1. Decide if **this** crate should provide relative safety, or a direct interface to the Connext API on which a more ergonomic interface can be written.
