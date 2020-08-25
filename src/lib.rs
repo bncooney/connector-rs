@@ -55,7 +55,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_new")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_connector_delete_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize)>> {
@@ -63,7 +63,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_delete")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_reader_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> isize>> {
@@ -71,7 +71,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getReader")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_writer_new_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> isize>> {
@@ -79,7 +79,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getWriter")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_reader_wait_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, i32) -> i32>> {
@@ -87,7 +87,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnectorReaders_waitForData")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_writer_clear_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString)>> {
@@ -95,7 +95,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_clear")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_take_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> i32>> {
@@ -103,7 +103,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_take")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_read_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> i32>> {
@@ -111,7 +111,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_read")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_writer_write_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
@@ -119,7 +119,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_write")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_get_samples_length_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString) -> SamplesLength>> {
@@ -127,7 +127,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getSamplesLength")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_get_json_sample_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, i32) -> CString>> {
@@ -135,7 +135,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_getJSONSample")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_set_json_instance_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(isize, CString, CString)>> {
@@ -143,7 +143,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_setJSONInstance")?;
 		}
-		return Ok(func);
+		Ok(func)
 	}
 
 	fn load_free_string_symbol(library: &Library) -> Result<Symbol<unsafe extern "C" fn(CString)>> {
@@ -151,7 +151,7 @@ impl ConnextLibrary<'_> {
 		unsafe {
 			func = library.get(b"RTIDDSConnector_freeString")?;
 		}
-		return Ok(func);
+		Ok(func)
 	} 
 }
 

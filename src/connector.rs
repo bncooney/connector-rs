@@ -90,15 +90,15 @@ impl Connector<'_> {
 		}
 
 		match ReturnCode::from_i32(return_code) {
-			Some(ReturnCode::Ok) => return Ok(()),
+			Some(ReturnCode::Ok) => Ok(()),
 			Some(ReturnCode::NoData) => {
-				return Err(NoData {
+				Err(NoData {
 					entity: EntityType::Reader,
 					operation,
 				}
 				.into())
 			} //TODO: Log this as a logic error
-			_ => return Err(format!("{}:{}", "Unexpected error occured in Connector::take", return_code).into()),
+			_ => Err(format!("{}:{}", "Unexpected error occured in Connector::take", return_code).into()),
 		}
 	}
 
@@ -114,7 +114,7 @@ impl Connector<'_> {
 
 	pub fn get_json_sample(&self, reader: &Reader, index: i32) -> Result<String> {
 		if index < 1 {
-			return Err(format!("{}", "Connext sample index start at 1, ").into());
+			return Err("Connext sample index start at 1, ".into());
 		}
 
 		let get_json_sample = &self.library.get_json_sample_symbol;

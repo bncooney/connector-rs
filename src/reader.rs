@@ -82,9 +82,9 @@ impl Reader<'_> {
 		}
 
 		match ReturnCode::from_i32(return_code) {
-			Some(ReturnCode::Ok) => return Ok(()),
-			Some(ReturnCode::Timeout) => return Err(Timeout { entity: EntityType::Reader }.into()),
-			_ => return Err(format!("{}:{}", "Unexpected error occured in Reader::wait", return_code).into()),
+			Some(ReturnCode::Ok) => Ok(()),
+			Some(ReturnCode::Timeout) => Err(Timeout { entity: EntityType::Reader }.into()),
+			_ => Err(format!("{}:{}", "Unexpected error occured in Reader::wait", return_code).into()),
 		}
 	}
 }
