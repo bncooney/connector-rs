@@ -152,48 +152,30 @@ impl ConnextLibrary<'_> {
 			func = library.get(b"RTIDDSConnector_freeString")?;
 		}
 		Ok(func)
-	} 
-}
-
-#[derive(Debug)]
-pub enum Entity {
-	Participant,
-	Reader,
-	Writer,
-}
-
-#[derive(Debug)]
-pub(crate) enum Operation {
-	Take,
-	Read,
+	}
 }
 
 mod error {
-	use super::{Entity, Operation};
+	use std::error::Error;
 	use std::fmt::Display;
 
 	#[derive(Debug)]
-	pub(crate) struct Timeout {
-		pub(crate) entity: Entity,
-	}
+	pub(crate) struct Timeout {}
 
 	impl Display for Timeout {
 		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-			write!(f, "{:?} wait timed out.", &self.entity)
+			write!(f, "{:?} wait timed out.", &self.source())
 		}
 	}
 
 	impl std::error::Error for Timeout {}
 
 	#[derive(Debug)]
-	pub(crate) struct NoData {
-		pub(crate) entity: Entity,
-		pub(crate) operation: Operation,
-	}
+	pub(crate) struct NoData {}
 
 	impl Display for NoData {
 		fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-			write!(f, "{:?} called on {:?} returned no data.", &self.operation, &self.entity)
+			write!(f, "{:?} returned no data.", &self.source())
 		}
 	}
 

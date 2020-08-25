@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use super::{connector::Connector, entity::Entity, ConnextLibrary, Entity as EntityType, Result};
+use super::{connector::Connector, entity::Entity, ConnextLibrary, Result};
 
 #[derive(Debug)]
 pub struct Writer<'lib> {
@@ -12,10 +12,6 @@ pub struct Writer<'lib> {
 impl Entity for Writer<'_> {
 	fn entity_name(&self) -> CString {
 		self.entity_name.to_owned()
-	}
-
-	fn entity_type() -> EntityType {
-		EntityType::Writer
 	}
 }
 

@@ -9,7 +9,7 @@ use super::{
 	error::NoData,
 	reader::{Reader, ReturnCode},
 	writer::Writer,
-	ConnextLibrary, Entity as EntityType, Result, Operation,
+	ConnextLibrary, Result,
 };
 
 #[derive(Debug)]
@@ -48,9 +48,6 @@ impl Entity for Connector<'_> {
 	fn entity_name(&self) -> CString {
 		self.config_name.to_owned()
 	}
-	fn entity_type() -> EntityType {
-		EntityType::Participant
-	}
 }
 
 impl Connector<'_> {
@@ -70,19 +67,7 @@ impl Connector<'_> {
 	}
 
 	pub fn take(&self, reader: &Reader) -> Result<()> {
-		self.next(reader, Operation::Take)
-	}
-
-	pub fn read(&self, reader: &Reader) -> Result<()> {
-		self.next(reader, Operation::Read)
-	}
-
-	fn next(&self, reader: &Reader, operation: Operation) -> Result<()> {
-		let func = match operation {
-			Operation::Take => &self.library.take_symbol,
-			Operation::Read => &self.library.read_symbol,
-		};
-
+		let func = &self.library.take_symbol;
 		let return_code: i32;
 
 		unsafe {
@@ -91,14 +76,41 @@ impl Connector<'_> {
 
 		match ReturnCode::from_i32(return_code) {
 			Some(ReturnCode::Ok) => Ok(()),
-			Some(ReturnCode::NoData) => {
-				Err(NoData {
-					entity: EntityType::Reader,
-					operation,
+			Some(ReturnCode::NoData) => Err(NoData {}.into()),
+			// Some(x) => Err(format!("{} take returned {}", &reader.entity_name_str(), x.to_string()).into()),
+			// _ => Err(format!("{} take returned ReturnCode::{}", &reader.entity_name_str(), return_code).into()),
+			x => Err(format!(
+				"{} take returned {}",
+				&reader.entity_name_str(),
+				match x {
+					Some(x) => x.to_string(),
+					None => format!("ReturnCode::{}", return_code),
 				}
-				.into())
-			} //TODO: Log this as a logic error
-			_ => Err(format!("{}:{}", "Unexpected error occured in Connector::take", return_code).into()),
+			)
+			.into()),
+		}
+	}
+
+	pub fn read(&self, reader: &Reader) -> Result<()> {
+		let func = &self.library.read_symbol;
+		let return_code: i32;
+
+		unsafe {
+			return_code = func(self.connector_handle, reader.entity_name.as_ptr());
+		}
+
+		match ReturnCode::from_i32(return_code) {
+			Some(ReturnCode::Ok) => Ok(()),
+			Some(ReturnCode::NoData) => Err(NoData {}.into()),
+			x => Err(format!(
+				"{} read returned {}",
+				&reader.entity_name_str(),
+				match x {
+					Some(x) => x.to_string(),
+					None => format!("ReturnCode::{}", return_code),
+				}
+			)
+			.into()),
 		}
 	}
 
@@ -113,9 +125,8 @@ impl Connector<'_> {
 	}
 
 	pub fn get_json_sample(&self, reader: &Reader, index: i32) -> Result<String> {
-		if index < 1 {
-			return Err("Connext sample index start at 1, ".into());
-		}
+		// Connext "index" start at 1, segfault will occur without bounds checking this elsewhere anyway
+		let index = index+1;
 
 		let get_json_sample = &self.library.get_json_sample_symbol;
 		let sample_ptr: *const c_char;
@@ -143,7 +154,6 @@ impl Connector<'_> {
 
 	fn free_string(&self, string_ptr: *const c_char) {
 		let func = &self.library.free_string_symbol;
-
 		unsafe {
 			func(string_ptr);
 		}
