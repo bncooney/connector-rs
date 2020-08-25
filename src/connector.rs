@@ -77,8 +77,6 @@ impl Connector<'_> {
 		match ReturnCode::from_i32(return_code) {
 			Some(ReturnCode::Ok) => Ok(()),
 			Some(ReturnCode::NoData) => Err(NoData {}.into()),
-			// Some(x) => Err(format!("{} take returned {}", &reader.entity_name_str(), x.to_string()).into()),
-			// _ => Err(format!("{} take returned ReturnCode::{}", &reader.entity_name_str(), return_code).into()),
 			x => Err(format!(
 				"{} take returned {}",
 				&reader.entity_name_str(),
