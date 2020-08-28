@@ -33,14 +33,14 @@ impl<'lib> Connector<'lib> {
 
 		if connector_handle == 0 {
 			// Safe to unwrap, &str -> CString -> &str conversion
-			return Err(format!("Couldnt create connector, {}", config_name.to_str().unwrap()).into());
+			Err(format!("Couldnt create connector, {}", config_name.to_str().unwrap()).into())
+		} else {
+			Ok(Self {
+				library,
+				connector_handle,
+				config_name,
+			})
 		}
-
-		Ok(Self {
-			library,
-			connector_handle,
-			config_name,
-		})
 	}
 }
 
@@ -124,7 +124,7 @@ impl Connector<'_> {
 
 	pub fn get_json_sample(&self, reader: &Reader, index: i32) -> Result<String> {
 		// Connext "index" start at 1, segfault will occur without bounds checking this elsewhere anyway
-		let index = index+1;
+		let index = index + 1;
 
 		let get_json_sample = &self.library.get_json_sample_symbol;
 		let sample_ptr: *const c_char;

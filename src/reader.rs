@@ -53,10 +53,10 @@ impl<'lib> Reader<'lib> {
 		}
 		if handle == 0 {
 			// Safe to unwrap, &str -> CString -> &str conversion
-			return Err(format!("Couldnt create reader, {}", entity_name.to_str().unwrap()).into());
+			Err(format!("Couldnt create reader, {}", entity_name.to_str().unwrap()).into())
+		} else {
+			Ok(Self { entity_name, library, handle })
 		}
-
-		Ok(Self { entity_name, library, handle })
 	}
 }
 
